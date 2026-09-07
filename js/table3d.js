@@ -29,7 +29,8 @@ let glbLoaded = false;
 const GOLD = 0xd4a84b;
 const CAM_RADIUS = 6.6;
 const CAM_HEIGHT = 4.2;
-const SEAT_RADIUS = 2.05;
+let seatRadius = 2.05;
+let floorMesh = null, boardFace = null, boardFrame = null;
 
 export function init(cnv, opts = {}) {
   canvas = cnv;
@@ -92,6 +93,7 @@ function buildFloor() {
   const geo = new THREE.CircleGeometry(6, 64);
   const mat = new THREE.MeshStandardMaterial({ color: 0x0b0f1c, roughness: 0.55, metalness: 0.25 });
   const floor = new THREE.Mesh(geo, mat);
+  floorMesh = floor;
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0;
   scene.add(floor);
@@ -136,6 +138,8 @@ function buildWhiteboard() {
   const frame = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 1.45),
     new THREE.MeshStandardMaterial({ color: GOLD, roughness: 0.3, metalness: 1 }));
   frame.position.set(0, 1.65, -2.86);
+  boardFace = face;
+  boardFrame = frame;
   scene.add(frame, face);
 }
 
@@ -285,7 +289,7 @@ export function setMembers(list) {
   members.forEach((m, i) => {
     const s = seatObjs.get(m.id);
     const a = Math.PI + (i / Math.max(n, 1)) * Math.PI * 2;
-    const x = Math.sin(a) * SEAT_RADIUS, z = Math.cos(a) * SEAT_RADIUS;
+    const x = Math.sin(a) * seatRadius, z = Math.cos(a) * seatRadius;
     s.group.position.set(x, 0, z);
     s.group.lookAt(0, 0, 0);
     applyState(s, m);
@@ -315,14 +319,28 @@ async function loadGlb(url) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(url);
   const model = gltf.scene;
+  // The Blender scene owns the table, floor, wall and whiteboard; seats stay
+  // procedural so the ring re-spaces for any member count.
   model.traverse(o => {
-    if (o.isMesh && o.material && 'envMapIntensity' in o.material) o.material.envMapIntensity = 0.6;
+    if (!o.isMesh) return;
+    if (o.name === 'Whiteboard_Face') {
+      o.material = new THREE.MeshBasicMaterial({ map: boardTex });
+    } else if (o.name === 'Marker_Disc') {
+      o.visible = false;
+    }
   });
-  // The Blender scene owns the table and room; seats stay procedural so the
-  // ring re-spaces for any member count.
-  if (placeholderTable) { scene.remove(placeholderTable); disposeObj(placeholderTable); placeholderTable = null; }
+  const seat1 = model.getObjectByName('Seat_01');
+  if (seat1) {
+    const r = Math.hypot(seat1.position.x, seat1.position.z);
+    if (r > 0.5 && r < 5) seatRadius = r;
+  }
+  [placeholderTable, floorMesh, boardFace, boardFrame].forEach(o => {
+    if (o) { scene.remove(o); disposeObj(o); }
+  });
+  placeholderTable = floorMesh = boardFace = boardFrame = null;
   scene.add(model);
   glbLoaded = true;
+  setMembers(members);
 }
 
 // ---------- interaction ----------
@@ -461,4 +479,24 @@ export function dispose() {
   scene = camera = canvas = host = null;
   placeholderTable = null;
   glbLoaded = false;
+}
+
+// Diagnostics for the browser console; not used by the app.
+export function _debug(opts = {}) {
+  const glb = scene && scene.children.find(c => c.type === 'Scene' || c.type === 'Group' && c !== seatsGroup);
+  if (glb && 'hideGlb' in opts) glb.visible = !opts.hideGlb;
+  if (glb && opts.mesh) glb.traverse(o => { if (o.name === opts.mesh) o.visible = !opts.hide; });
+  const box = glb ? new THREE.Box3().setFromObject(glb) : null;
+  const meshes = [];
+  if (glb) glb.traverse(o => { if (o.isMesh) { const b = new THREE.Box3().setFromObject(o); meshes.push(o.name + ' y[' + b.min.y.toFixed(2) + ',' + b.max.y.toFixed(2) + '] z[' + b.min.z.toFixed(2) + ',' + b.max.z.toFixed(2) + '] side=' + o.material.side + ' t=' + o.material.transparent); } });
+  return {
+    glbBox: box ? [box.min.toArray().map(v => +v.toFixed(2)), box.max.toArray().map(v => +v.toFixed(2))] : null,
+    meshes,
+    members: members.length,
+    seats: seatObjs.size,
+    glbLoaded,
+    seatRadius,
+    children: scene ? scene.children.map(c => (c.name || c.type) + (c.visible ? '' : ' (hidden)')) : [],
+    seatVisible: [...seatObjs.values()].map(s => s.group.visible + '@' + s.group.position.x.toFixed(2) + ',' + s.group.position.z.toFixed(2))
+  };
 }

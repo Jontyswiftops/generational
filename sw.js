@@ -1,6 +1,6 @@
 // Generational service worker: network-first for same-origin requests,
 // cache fallback for offline. Bump CACHE and update ASSETS when files change.
-const CACHE = 'generational-v1';
+const CACHE = 'generational-v2';
 const ASSETS = [
   './',
   'index.html',
@@ -12,6 +12,7 @@ const ASSETS = [
   'vendor/three/addons/loaders/GLTFLoader.js',
   'vendor/three/addons/utils/BufferGeometryUtils.js',
   'icons/icon.svg',
+  'assets/models/table.glb',
   'icons/icon-180.png',
   'js/app.js',
   'js/config.js',

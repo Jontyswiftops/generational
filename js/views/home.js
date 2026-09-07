@@ -88,7 +88,7 @@ async function mount3d(hero) {
   const loading = hero.querySelector('.loading');
   try {
     table = await import('../table3d.js');
-    await table.init(canvas, { glbUrl: null });
+    await table.init(canvas, { glbUrl: new URL('../../assets/models/table.glb', import.meta.url).href });
     loading?.remove();
     table.onSeatTap((seat, pos) => {
       const tip = document.createElement('div');
