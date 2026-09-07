@@ -9,6 +9,7 @@ import * as feed from './views/feed.js';
 import * as talk from './views/talk.js';
 import * as me from './views/me.js';
 import * as member from './views/member.js';
+import * as tables from './views/tables.js';
 
 const PENDING_JOIN = 'gen:pendingJoin';
 
@@ -28,6 +29,7 @@ const routes = [
   { re: /^#\/dm$/, view: talk, tab: 'talk', back: true },
   { re: /^#\/dm\/([0-9a-f-]{36})$/, view: talk, tab: 'talk', back: true },
   { re: /^#\/member\/([0-9a-f-]{36})$/, view: member, tab: 'home', back: true },
+  { re: /^#\/tables$/, view: tables, tab: null, back: true },
   { re: /^#\/me$/, view: me, tab: null, back: true }
 ];
 
@@ -59,9 +61,10 @@ async function processPendingJoin() {
   }
   localStorage.removeItem(PENDING_JOIN);
   try {
-    await cloud.joinTable(code);
+    const t = await cloud.joinTable(code);
     await state.refresh();
-    toast('Welcome to ' + state.tableName());
+    await state.switchTable(t.id);
+    toast('Welcome to ' + t.name);
     location.hash = '#/';
   } catch (err) {
     toast(err.message || 'That invite code did not work');
@@ -95,6 +98,7 @@ async function route() {
   }
 }
 
+titleEl.addEventListener('click', () => { if (cloud.user()) location.hash = '#/tables'; });
 backBtn.addEventListener('click', () => {
   if (window.history.length > 1) window.history.back();
   else location.hash = '#/';
@@ -107,6 +111,7 @@ const talkBadge = document.getElementById('talkBadge');
 
 function paintHeader() {
   titleEl.textContent = state.tableName();
+  titleEl.classList.toggle('switchable', state.S.tables.length > 1 || state.isOwner());
   if (talkBadge) {
     talkBadge.hidden = !(state.S.unread > 0);
     talkBadge.textContent = state.S.unread > 9 ? '9+' : String(state.S.unread || '');

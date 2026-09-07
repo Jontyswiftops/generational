@@ -839,3 +839,20 @@ alter table public.dms enable row level security;
 -- Policies: participants read; members send to members; recipient updates
 -- read_at; sender deletes. Grants: select, insert, delete, update (read_at).
 -- RPCs: dm_threads(), dm_thread(other uuid, lim int), dm_mark_read(other uuid), dm_unread().
+
+-- ============================================================
+-- Migration multi_table (2026-09-07)
+-- More than one table. app_owner(user_id) lists who may open tables.
+-- round_table drops the singleton column and gains created_by; members has a
+-- composite key (table_id, user_id); every content table gains table_id
+-- (child rows inherit it from their parent via the inherit_table_id trigger).
+-- Policies are scoped by is_member_of(table_id) / is_host_of(table_id), and
+-- profiles and direct messages are visible between people who share a table
+-- (shares_table). RPCs: my_tables(), table_status(p_table), create_table(name)
+-- (owner only), delete_table(p_table), join_table(code), rotate_invite_code,
+-- remove_member, leave_table, rename_table, set_members_can_invite,
+-- table_members, list_ideas, list_sessions, create_session, feed,
+-- channel_feed, list_resources all take p_table; idea_detail, session_detail
+-- and the session RPCs check membership through the row's table_id.
+-- The full SQL lives in the Supabase migration of the same name.
+-- ============================================================

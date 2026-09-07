@@ -1,4 +1,4 @@
-// Bits every view needs: the signed-out and not-yet-a-member gates, the
+// Bits every view needs: the signed-out and no-table gates, the
 // join-with-code card, and small HTML helpers.
 import * as cloud from '../cloud.js';
 import * as state from '../state.js';
@@ -13,16 +13,16 @@ export function signInCard() {
 }
 
 export function joinCard() {
-  const s = state.S.status;
   let html = '<div class="card gold"><h3>Take your seat</h3>' +
     '<p class="hint" style="margin-top:0">Generational is invite only. Enter the code your mate sent you, or open their invite link.</p>' +
     '<div class="row"><input type="text" id="joinCode" placeholder="Invite code" maxlength="8" autocapitalize="characters" autocomplete="off" spellcheck="false">' +
     '<button class="btn primary" id="joinBtn">Join</button></div>' +
     '<div class="hint" id="joinStatus"></div></div>';
-  if (s && !s.host_claimed) {
-    html += '<div class="card"><h3>Starting a new table?</h3>' +
-      '<p class="hint" style="margin-top:0">Nobody has claimed the host seat yet. The host runs the table: invites, sessions, and the house rules.</p>' +
-      '<button class="btn" id="claimBtn">Claim the host seat</button></div>';
+  if (state.isOwner()) {
+    html += '<div class="card"><h3>Open a new table</h3>' +
+      '<p class="hint" style="margin-top:0">You can run more than one table. Each has its own members, invite code, ideas, sessions and chat.</p>' +
+      '<div class="row"><input type="text" id="newTableName" placeholder="Table name" maxlength="60">' +
+      '<button class="btn" id="createTableBtn">Open</button></div><div class="hint" id="createStatus"></div></div>';
   }
   return html;
 }
@@ -35,26 +35,31 @@ export function bindJoin(el) {
     if (!code) { status.textContent = 'Enter the invite code first.'; return; }
     btn.disabled = true;
     try {
-      await cloud.joinTable(code);
+      const t = await cloud.joinTable(code);
       await state.refresh();
-      toast('Welcome to ' + state.tableName());
+      await state.switchTable(t.id);
+      toast('Welcome to ' + t.name);
       location.hash = '#/';
     } catch (err) {
       status.textContent = err.message || 'That code did not work.';
       btn.disabled = false;
     }
   });
-  const claim = el.querySelector('#claimBtn');
-  if (claim) claim.addEventListener('click', async () => {
-    claim.disabled = true;
+  const create = el.querySelector('#createTableBtn');
+  if (create) create.addEventListener('click', async () => {
+    const name = (el.querySelector('#newTableName').value || '').trim();
+    const status = el.querySelector('#createStatus');
+    if (!name) { status.textContent = 'Give the table a name.'; return; }
+    create.disabled = true;
     try {
-      await cloud.claimHost();
+      const id = await cloud.createTable(name);
       await state.refresh();
-      toast('You are the host. Share your invite code from the Me screen.');
+      await state.switchTable(id);
+      toast(name + ' is open. Share the invite code from the Me screen.');
       location.hash = '#/me';
     } catch (err) {
-      toast(err.message || 'Could not claim the host seat');
-      claim.disabled = false;
+      status.textContent = err.message || 'Could not open the table.';
+      create.disabled = false;
     }
   });
 }
@@ -66,9 +71,17 @@ export function gate(el) {
     el.innerHTML = signInCard();
     return false;
   }
+  if (!state.S.tableId) {
+    if (!state.S.tables.length && state.S.error === null && !state.S.profile) {
+      el.innerHTML = '<div class="empty">Setting the table&hellip;</div>';
+      return false;
+    }
+    el.innerHTML = joinCard() + DISCLAIMER;
+    bindJoin(el);
+    return false;
+  }
   if (!state.S.status) {
     el.innerHTML = '<div class="empty">Setting the table&hellip;</div>';
-    // status arrives via state.refresh(); the caller re-renders on change
     return false;
   }
   if (!state.isMember()) {
@@ -77,6 +90,11 @@ export function gate(el) {
     return false;
   }
   return true;
+}
+
+// Views re-render only when this changes, never on a presence tick.
+export function gateKey() {
+  return JSON.stringify([!!cloud.user(), state.S.tableId, !!state.S.status, state.isMember(), state.S.tables.length]);
 }
 
 export function avatar(name, cls = '') {

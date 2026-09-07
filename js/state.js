@@ -1,13 +1,16 @@
-// App-wide membership state: who I am, whether I am at the table, who else
-// is, and who is online right now. Cached on-device so a failed fetch never
-// paints an empty screen that looks like being kicked out.
+// App-wide state: which tables I sit at, which one is open, who else is
+// there, and who is online right now. Cached on-device so a failed fetch
+// never paints an empty screen that looks like being kicked out.
 import * as cloud from './cloud.js';
 
 export const S = {
-  status: null,     // table_status() result
+  tables: [],       // my_tables().tables
+  isOwner: false,   // may open new tables
+  tableId: null,    // the table currently open
+  status: null,     // table_status(tableId)
   profile: null,    // my profiles row
-  members: [],      // table_members() rows
-  presence: {},     // presenceState() of rt-table: uid -> [{...meta}]
+  members: [],      // table_members(tableId)
+  presence: {},     // presenceState() of the table channel: uid -> [{...meta}]
   unread: 0,        // unread direct messages
   error: null
 };
@@ -17,6 +20,7 @@ export function onChange(cb) {
   cbs.add(cb);
   return () => cbs.delete(cb);
 }
+
 let emitting = false;
 let emitAgain = false;
 function emit() {
@@ -39,20 +43,27 @@ export function jset(k, v) {
 }
 
 export function loadCache() {
-  S.status = jget('status', null);
+  S.tables = jget('tables', []);
+  S.isOwner = jget('isOwner', false);
+  S.tableId = jget('tableId', null);
+  S.status = jget('status:' + S.tableId, null);
   S.profile = jget('profile', null);
-  S.members = jget('members', []);
-  if (S.status?.is_member) joinTableChannel();
+  S.members = jget('members:' + S.tableId, []);
+  if (S.status?.is_member) joinChannels();
 }
 
 export function reset() {
+  S.tables = [];
+  S.isOwner = false;
+  S.tableId = null;
   S.status = null;
   S.profile = null;
   S.members = [];
   S.presence = {};
   S.unread = 0;
   S.error = null;
-  tableJoined = false;
+  joinedTable = null;
+  userJoined = false;
   emit();
 }
 
@@ -65,16 +76,29 @@ export function refresh({ throttle = false } = {}) {
   if (inflight) return inflight;
   inflight = (async () => {
     try {
-      const [status, profile] = await Promise.all([cloud.tableStatus(), cloud.myProfile()]);
-      S.status = status;
+      const [mine, profile] = await Promise.all([cloud.myTables(), cloud.myProfile()]);
+      S.tables = mine.tables || [];
+      S.isOwner = !!mine.is_owner;
       S.profile = profile;
-      jset('status', status);
+      jset('tables', S.tables);
+      jset('isOwner', S.isOwner);
       jset('profile', profile);
-      if (status.is_member) {
-        [S.members, S.unread] = await Promise.all([cloud.tableMembers(), cloud.dmUnread().catch(() => 0)]);
-        jset('members', S.members);
-        joinTableChannel();
+      if (!S.tables.some(t => t.id === S.tableId)) {
+        S.tableId = S.tables[0]?.id || null;
+        jset('tableId', S.tableId);
+      }
+      if (S.tableId) {
+        const [status, members, unread] = await Promise.all([
+          cloud.tableStatus(S.tableId), cloud.tableMembers(S.tableId), cloud.dmUnread().catch(() => 0)
+        ]);
+        S.status = status;
+        S.members = members;
+        S.unread = unread;
+        jset('status:' + S.tableId, status);
+        jset('members:' + S.tableId, members);
+        joinChannels();
       } else {
+        S.status = null;
         S.members = [];
         S.unread = 0;
       }
@@ -90,30 +114,57 @@ export function refresh({ throttle = false } = {}) {
   return inflight;
 }
 
+// Open a different table. Everything table-scoped reloads.
+export async function switchTable(id) {
+  if (!id || id === S.tableId) return;
+  if (joinedTable) { cloud.leave(tableChannelFor(joinedTable)); joinedTable = null; }
+  S.tableId = id;
+  jset('tableId', id);
+  S.status = jget('status:' + id, null);
+  S.members = jget('members:' + id, []);
+  S.presence = {};
+  lastFetch = 0;
+  emit();
+  await refresh();
+}
+
+export const tid = () => S.tableId;
 export const isMember = () => !!S.status?.is_member;
 export const isHost = () => !!S.status?.is_host;
+export const isOwner = () => !!S.isOwner;
 export const myName = () => S.profile?.display_name || '';
-export const tableName = () => S.status?.name || 'Generational';
+export const tableName = () => S.status?.name || S.tables.find(t => t.id === S.tableId)?.name || 'Generational';
 
-// ---- presence on the table channel ----
+// ---- realtime channels ----
 
-let tableJoined = false;
+const tableChannelFor = id => 'rt-table-' + id;
+export const tableChannel = () => tableChannelFor(S.tableId);
+export const userChannel = uid => 'rt-user-' + uid;
+
+let joinedTable = null;
+let userJoined = false;
 let currentView = '#/';
 
-function joinTableChannel() {
-  if (tableJoined || !cloud.user()) return;
-  tableJoined = true;
-  cloud.onPresence('rt-table', state => {
-    S.presence = state;
-    emit();
-  });
-  cloud.on('rt-table', 'dm', p => { if (!p.to || p.to === cloud.user()?.id) refreshUnread(); });
-  trackSelf();
+function joinChannels() {
+  if (!cloud.user() || !S.tableId) return;
+  if (joinedTable !== S.tableId) {
+    if (joinedTable) cloud.leave(tableChannelFor(joinedTable));
+    joinedTable = S.tableId;
+    cloud.onPresence(tableChannel(), state => {
+      S.presence = state;
+      emit();
+    });
+    trackSelf();
+  }
+  if (!userJoined) {
+    userJoined = true;
+    cloud.on(userChannel(cloud.user().id), 'dm', () => refreshUnread());
+  }
 }
 
 function trackSelf() {
-  if (!tableJoined) return;
-  cloud.track('rt-table', {
+  if (!joinedTable) return;
+  cloud.track(tableChannel(), {
     uid: cloud.user().id,
     name: myName(),
     view: currentView,
@@ -160,14 +211,14 @@ export function seats() {
 }
 
 export async function refreshUnread() {
-  if (!cloud.user() || !isMember()) return;
+  if (!cloud.user()) return;
   try { S.unread = await cloud.dmUnread(); emit(); } catch {}
 }
 
 export const me = () => S.members.find(m => m.is_self) || null;
 export const member = uid => S.members.find(m => m.user_id === uid) || null;
 
-// Fire a table-wide ping and refresh our own copy.
+// Fire a table-wide ping so other members refetch.
 export function announce(event, payload = {}) {
-  cloud.ping('rt-table', event, payload);
+  if (S.tableId) cloud.ping(tableChannel(), event, payload);
 }

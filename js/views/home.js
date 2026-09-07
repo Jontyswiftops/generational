@@ -2,7 +2,7 @@
 import * as cloud from '../cloud.js';
 import * as state from '../state.js';
 import { esc, initials, timeAgo, fmtDateTime, untilText, toast } from '../util.js';
-import { gate, DISCLAIMER } from './shared.js';
+import { gate, DISCLAIMER , gateKey } from './shared.js';
 
 export const title = 'Generational';
 
@@ -71,6 +71,8 @@ function paint() {
   const list = el.querySelector('#seatList');
   if (list) list.innerHTML = seats.length ? seats.map(seatRow).join('') :
     '<div class="empty">Just you so far. Share your invite code from the Me screen.</div>';
+  const chips = el.querySelectorAll('[data-switch]');
+  chips.forEach(b => b.classList.toggle('on', b.dataset.switch === state.S.tableId));
   const next = el.querySelector('#nextSession');
   if (next) next.innerHTML = goalsNudge() + nextSessionCard();
   if (table) {
@@ -81,7 +83,7 @@ function paint() {
 
 async function loadNext() {
   try {
-    const list = await cloud.listSessions();
+    const list = await cloud.listSessions(state.tid());
     const cutoff = Date.now() - 4 * 3600000;
     const upcoming = list.filter(s => s.status === 'live' || (s.status === 'scheduled' && new Date(s.starts_at).getTime() > cutoff))
       .sort((a, b) => (a.status === 'live' ? -1 : 1) - (b.status === 'live' ? -1 : 1) || new Date(a.starts_at) - new Date(b.starts_at));
@@ -128,7 +130,6 @@ export async function render(root) {
   el = root;
   unsubs.forEach(fn => fn());
   unsubs = [];
-  const gateKey = () => JSON.stringify([!!cloud.user(), !!state.S.status, state.isMember(), state.S.status?.host_claimed]);
   const startKey = gateKey();
   unsubs.push(state.onChange(() => {
     if (gateKey() !== startKey || (state.isMember() && !el.querySelector('#seatList'))) render(root);
@@ -140,14 +141,17 @@ export async function render(root) {
   el.innerHTML =
     (use3d ? '<div class="hero3d" id="hero"><canvas></canvas><div class="loading">Setting the table&hellip;</div>' +
       '<div class="hero-title"><h2>' + esc(state.tableName()) + '</h2><p>Drag to look around. Tap a seat.</p></div></div>' : '') +
+    (state.S.tables.length > 1 ? '<div class="chips">' + state.S.tables.map(t => '<button data-switch="' + t.id + '"' + (t.id === state.S.tableId ? ' class="on"' : '') + '>' + esc(t.name) + (t.unread ? ' (' + t.unread + ')' : '') + '</button>').join('') + '<button data-go="#/tables">+ Tables</button></div>' : '') +
     '<div class="statgrid" id="homeStats"></div>' +
     '<div id="nextSession"></div>' +
     '<h3>Seats</h3><div class="seats" id="seatList"></div>' +
     DISCLAIMER;
 
+  el.querySelectorAll('[data-switch]').forEach(b => b.addEventListener('click', () => state.switchTable(b.dataset.switch)));
+  el.querySelector('[data-go]')?.addEventListener('click', e => { location.hash = e.target.dataset.go; });
   paint();
   loadNext();
-  unsubs.push(cloud.on('rt-table', 'sessions', loadNext));
+  unsubs.push(cloud.on(state.tableChannel(), 'sessions', loadNext));
   if (use3d) mount3d(el.querySelector('#hero'));
   state.refresh({ throttle: true });
 }

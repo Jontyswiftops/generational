@@ -61,17 +61,19 @@ export const saveDisplayName = name =>
 export const saveProfile = patch =>
   run(sb.from('profiles').update(patch).eq('id', user().id));
 
-// ---- membership ----
+// ---- tables and membership ----
 
-export const tableStatus = () => rpc('table_status');
-export const claimHost = () => rpc('claim_host');
+export const myTables = () => rpc('my_tables');
+export const tableStatus = tid => rpc('table_status', { p_table: tid });
+export const createTable = name => rpc('create_table', { p_name: name });
+export const deleteTable = tid => rpc('delete_table', { p_table: tid });
 export const joinTable = code => rpc('join_table', { code });
-export const rotateInviteCode = () => rpc('rotate_invite_code');
-export const removeMember = uid => rpc('remove_member', { uid });
-export const leaveTable = () => rpc('leave_table');
-export const renameTable = name => rpc('rename_table', { p_name: name });
-export const tableMembers = () => rpc('table_members');
-export const setMembersCanInvite = on => rpc('set_members_can_invite', { p_on: on });
+export const rotateInviteCode = tid => rpc('rotate_invite_code', { p_table: tid });
+export const removeMember = (tid, uid) => rpc('remove_member', { p_table: tid, uid });
+export const leaveTable = tid => rpc('leave_table', { p_table: tid });
+export const renameTable = (tid, name) => rpc('rename_table', { p_table: tid, p_name: name });
+export const setMembersCanInvite = (tid, on) => rpc('set_members_can_invite', { p_table: tid, p_on: on });
+export const tableMembers = tid => rpc('table_members', { p_table: tid });
 
 // ---- direct messages ----
 
@@ -85,7 +87,7 @@ export const dmDelete = id => run(sb.from('dms').delete().eq('id', id));
 
 // ---- ideas ----
 
-export const listIdeas = status => rpc('list_ideas', { p_status: status || null });
+export const listIdeas = (tid, status) => rpc('list_ideas', { p_table: tid, p_status: status || null });
 export const ideaDetail = id => rpc('idea_detail', { p_id: id });
 
 export const createIdea = fields =>
@@ -113,11 +115,11 @@ export const deleteComment = id => run(sb.from('comments').delete().eq('id', id)
 
 // ---- sessions ----
 
-export const listSessions = () => rpc('list_sessions');
+export const listSessions = tid => rpc('list_sessions', { p_table: tid });
 export const sessionDetail = id => rpc('session_detail', { p_id: id });
 
-export const createSession = (title, startsAt, meetLink, agenda) =>
-  rpc('create_session', { p_title: title, p_starts_at: startsAt, p_meet_link: meetLink || null, p_agenda: agenda });
+export const createSession = (tid, title, startsAt, meetLink, agenda) =>
+  rpc('create_session', { p_table: tid, p_title: title, p_starts_at: startsAt, p_meet_link: meetLink || null, p_agenda: agenda });
 
 export const updateSession = (id, title, startsAt, meetLink, agenda) =>
   rpc('update_session', { p_id: id, p_title: title, p_starts_at: startsAt, p_meet_link: meetLink || null, p_agenda: agenda });
@@ -146,10 +148,10 @@ export const deleteActionItem = id => run(sb.from('action_items').delete().eq('i
 
 // ---- feed ----
 
-export const feed = (lim = 40) => rpc('feed', { lim });
+export const feed = (tid, lim = 40) => rpc('feed', { p_table: tid, lim });
 
-export const createPost = (kind, body) =>
-  run(sb.from('posts').insert({ kind, body, author_id: user().id }));
+export const createPost = (tid, kind, body) =>
+  run(sb.from('posts').insert({ table_id: tid, kind, body, author_id: user().id }));
 
 export const deletePost = id => run(sb.from('posts').delete().eq('id', id));
 
@@ -161,15 +163,15 @@ export function toggleReaction(postId, emoji, on) {
 
 // ---- talk + resources ----
 
-export const channelFeed = (channel, before = null, lim = 60) =>
-  rpc('channel_feed', { p_channel: channel, before, lim });
+export const channelFeed = (tid, channel, before = null, lim = 60) =>
+  rpc('channel_feed', { p_table: tid, p_channel: channel, before, lim });
 
-export const sendChannelMessage = (channel, body) =>
-  run(sb.from('channel_messages').insert({ channel, body, author_id: user().id }));
+export const sendChannelMessage = (tid, channel, body) =>
+  run(sb.from('channel_messages').insert({ table_id: tid, channel, body, author_id: user().id }));
 
 export const deleteChannelMessage = id => run(sb.from('channel_messages').delete().eq('id', id));
 
-export const listResources = () => rpc('list_resources');
+export const listResources = tid => rpc('list_resources', { p_table: tid });
 
 export const addResource = fields =>
   run(sb.from('resources').insert({ ...fields, shared_by: user().id }));
@@ -216,9 +218,9 @@ export function on(name, event, cb) {
   return () => set.delete(cb);
 }
 
+// Sends on the channel, joining it first if this client has not yet.
 export function ping(name, event, payload = {}) {
-  const c = channels.get(name);
-  if (!c) return;
+  const c = ensure(name);
   try { c.ch.send({ type: 'broadcast', event, payload }); } catch {}
 }
 

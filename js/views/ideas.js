@@ -3,7 +3,7 @@
 import * as cloud from '../cloud.js';
 import * as state from '../state.js';
 import { esc, initials, timeAgo, toast, linkify, safeUrl, CATEGORIES, IDEA_STATUS } from '../util.js';
-import { gate, handleKick, DISCLAIMER } from './shared.js';
+import { gate, handleKick, DISCLAIMER , gateKey } from './shared.js';
 
 export const title = 'Ideas';
 
@@ -46,14 +46,14 @@ function paintList() {
 
 async function loadList() {
   try {
-    ideas = await cloud.listIdeas(null);
-    state.jset('ideas', ideas);
+    ideas = await cloud.listIdeas(state.tid(), null);
+    state.jset('ideas:' + state.tid(), ideas);
   } catch (err) { if (!handleKick(err)) toast('Could not load ideas: ' + err.message); }
   paintList();
 }
 
 function renderList() {
-  ideas = state.jget('ideas', []);
+  ideas = state.jget('ideas:' + state.tid(), []);
   el.innerHTML =
     '<a class="btn primary big" href="#/ideas/new">Pitch an idea</a>' +
     '<div class="section-tabs">' + ['open', 'in_motion', 'parked', 'all'].map(s =>
@@ -73,7 +73,7 @@ function renderList() {
   }));
   paintList();
   loadList();
-  unsubs.push(cloud.on('rt-table', 'ideas', loadList));
+  unsubs.push(cloud.on(state.tableChannel(), 'ideas', loadList));
 }
 
 // ---------- new ----------
@@ -99,7 +99,7 @@ function renderNew() {
     if (!f.title || !f.pitch) { status.textContent = 'A title and a pitch are the minimum.'; return; }
     e.target.disabled = true;
     try {
-      const row = await cloud.createIdea(f);
+      const row = await cloud.createIdea({ ...f, table_id: state.tid() });
       state.announce('ideas', { id: row.id });
       state.announce('feed');
       toast('Idea is on the table');
@@ -222,7 +222,7 @@ function renderDetail(id) {
   replyTo = null;
   el.innerHTML = '<div class="empty">Loading&hellip;</div>';
   loadDetail(id);
-  unsubs.push(cloud.on('rt-table', 'ideas', p => { if (!p.id || p.id === id) loadDetail(id); }));
+  unsubs.push(cloud.on(state.tableChannel(), 'ideas', p => { if (!p.id || p.id === id) loadDetail(id); }));
 }
 
 // ---------- entry ----------
@@ -231,7 +231,6 @@ export async function render(root, id) {
   el = root;
   unsubs.forEach(fn => fn());
   unsubs = [];
-  const gateKey = () => JSON.stringify([!!cloud.user(), !!state.S.status, state.isMember(), state.S.status?.host_claimed]);
   const startKey = gateKey();
   unsubs.push(state.onChange(() => { if (gateKey() !== startKey) render(root, id); }));
   if (!gate(el)) return;

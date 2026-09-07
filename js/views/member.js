@@ -2,7 +2,7 @@
 import * as cloud from '../cloud.js';
 import * as state from '../state.js';
 import { esc, initials, timeAgo, linkify, FOCUS } from '../util.js';
-import { gate, DISCLAIMER } from './shared.js';
+import { gate, DISCLAIMER , gateKey } from './shared.js';
 
 export const title = 'Member';
 
@@ -44,7 +44,6 @@ export async function render(root, uid) {
   el = root;
   unsubs.forEach(fn => fn());
   unsubs = [];
-  const gateKey = () => JSON.stringify([!!cloud.user(), !!state.S.status, state.isMember(), state.S.status?.host_claimed]);
   const startKey = gateKey();
   unsubs.push(state.onChange(() => { if (gateKey() !== startKey) render(root, uid); else if (state.isMember()) paint(uid); }));
   if (!gate(el)) return;

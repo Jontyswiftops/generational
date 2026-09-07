@@ -3,7 +3,7 @@
 import * as cloud from '../cloud.js';
 import * as state from '../state.js';
 import { esc, initials, fmtDateTime, fmtTime, fmtDate, untilText, timeAgo, toast, linkify, safeUrl, toLocalInput, debounce } from '../util.js';
-import { gate, handleKick, DISCLAIMER } from './shared.js';
+import { gate, handleKick, DISCLAIMER , gateKey } from './shared.js';
 
 export const title = 'Sessions';
 
@@ -52,19 +52,19 @@ function paintList() {
 
 async function loadList() {
   try {
-    sessions = await cloud.listSessions();
-    state.jset('sessions', sessions);
+    sessions = await cloud.listSessions(state.tid());
+    state.jset('sessions:' + state.tid(), sessions);
   } catch (err) { if (!handleKick(err)) toast('Could not load sessions: ' + err.message); }
   paintList();
 }
 
 function renderList() {
-  sessions = state.jget('sessions', []);
+  sessions = state.jget('sessions:' + state.tid(), []);
   el.innerHTML = (state.isHost() ? '<a class="btn primary big" href="#/sessions/new">Schedule a round table</a>' : '') +
     '<div id="sessionList"></div>' + DISCLAIMER;
   paintList();
   loadList();
-  unsubs.push(cloud.on('rt-table', 'sessions', loadList));
+  unsubs.push(cloud.on(state.tableChannel(), 'sessions', loadList));
 }
 
 // ---------- new / edit ----------
@@ -95,7 +95,7 @@ async function renderForm(id) {
     try {
       let sid = id;
       if (s) await cloud.updateSession(id, titleV, iso, link, agenda);
-      else sid = await cloud.createSession(titleV, iso, link, agenda);
+      else sid = await cloud.createSession(state.tid(), titleV, iso, link, agenda);
       state.announce('sessions');
       toast(s ? 'Session updated' : 'Round table scheduled');
       location.hash = '#/sessions/' + sid;
@@ -179,7 +179,7 @@ function renderDetail(id) {
   detail = null;
   el.innerHTML = '<div class="empty">Loading&hellip;</div>';
   loadDetail(id);
-  unsubs.push(cloud.on('rt-table', 'sessions', () => loadDetail(id)));
+  unsubs.push(cloud.on(state.tableChannel(), 'sessions', () => loadDetail(id)));
 }
 
 // ---------- live room ----------
@@ -368,7 +368,6 @@ export async function render(root, id, mode) {
   el = root;
   unsubs.forEach(fn => fn());
   unsubs = [];
-  const gateKey = () => JSON.stringify([!!cloud.user(), !!state.S.status, state.isMember(), state.S.status?.host_claimed]);
   const startKey = gateKey();
   unsubs.push(state.onChange(() => { if (gateKey() !== startKey) render(root, id, mode); }));
   if (!gate(el)) return;

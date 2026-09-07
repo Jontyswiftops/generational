@@ -2,7 +2,7 @@
 import * as cloud from '../cloud.js';
 import * as state from '../state.js';
 import { esc, initials, timeAgo, toast, linkify, EMOJI } from '../util.js';
-import { gate, handleKick, DISCLAIMER } from './shared.js';
+import { gate, handleKick, DISCLAIMER , gateKey } from './shared.js';
 
 export const title = 'Wins';
 
@@ -101,8 +101,8 @@ function paint() {
 
 async function load() {
   try {
-    posts = await cloud.feed(60);
-    state.jset('feed', posts);
+    posts = await cloud.feed(state.tid(), 60);
+    state.jset('feed:' + state.tid(), posts);
   } catch (err) { if (!handleKick(err)) toast('Could not load the feed: ' + err.message); }
   paint();
 }
@@ -111,12 +111,11 @@ export async function render(root) {
   el = root;
   unsubs.forEach(fn => fn());
   unsubs = [];
-  const gateKey = () => JSON.stringify([!!cloud.user(), !!state.S.status, state.isMember(), state.S.status?.host_claimed]);
   const startKey = gateKey();
   unsubs.push(state.onChange(() => { if (gateKey() !== startKey) render(root); else if (state.isMember()) paintStrip(); }));
   if (!gate(el)) return;
   el.dataset.ready = '1';
-  posts = state.jget('feed', []);
+  posts = state.jget('feed:' + state.tid(), []);
   el.innerHTML =
     '<div class="card"><div class="kind-row">' + Object.entries(KINDS).map(([k, v]) =>
       '<button class="btn' + (kind === k ? ' on' : '') + '" data-kind="' + k + '">' + v.icon + ' ' + v.label + '</button>').join('') + '</div>' +
@@ -134,7 +133,7 @@ export async function render(root) {
     if (!body) return;
     e.target.disabled = true;
     try {
-      await cloud.createPost(kind, body);
+      await cloud.createPost(state.tid(), kind, body);
       ta.value = '';
       state.announce('feed');
       toast('Posted');
@@ -145,7 +144,7 @@ export async function render(root) {
   });
   paint();
   load();
-  unsubs.push(cloud.on('rt-table', 'feed', load));
+  unsubs.push(cloud.on(state.tableChannel(), 'feed', load));
   state.refresh({ throttle: true });
 }
 

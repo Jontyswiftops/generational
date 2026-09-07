@@ -75,12 +75,14 @@ function accountHtml() {
       '<button type="button" data-focus="' + k + '"' + (focus.has(k) ? ' class="on"' : '') + '>' + v + '</button>').join('') + '</div>' +
     '<button class="btn primary" id="goalsBtn">Save goals</button></div>';
 
-  if (!s) {
+  if (!state.S.tableId) {
+    html += joinCard();
+  } else if (!s) {
     html += '<div class="empty">Checking your seat&hellip;</div>';
   } else if (!s.is_member) {
     html += joinCard();
   } else {
-    html += '<div class="card"><h3>' + esc(s.name) + '</h3>' +
+    html += '<div class="card"><div class="spread"><h3 style="margin:0">' + esc(s.name) + '</h3><a class="btn sm" href="#/tables">' + (state.S.tables.length > 1 ? 'Switch table' : 'Tables') + '</a></div>' +
       '<p class="hint" style="margin-top:0">' + (s.is_host ? 'You host this table.' : 'You have a seat at this table.') +
       ' ' + s.member_count + ' member' + (s.member_count === 1 ? '' : 's') + '.</p>';
     if (s.can_invite) {
@@ -151,7 +153,7 @@ function bindAccount() {
     e.target.disabled = false;
   });
 
-  if (!s) return;
+  if (!state.S.tableId || !s) { bindJoin(el); return; }
   if (!s.is_member) { bindJoin(el); return; }
 
   if (s.can_invite) {
@@ -168,13 +170,13 @@ function bindAccount() {
   }
   if (s.is_host) {
     el.querySelector('#inviteToggle').addEventListener('change', async e => {
-      try { await cloud.setMembersCanInvite(e.target.checked); toast(e.target.checked ? 'Members can now share the invite link' : 'Only you can share the invite link'); await state.refresh(); }
+      try { await cloud.setMembersCanInvite(state.tid(), e.target.checked); toast(e.target.checked ? 'Members can now share the invite link' : 'Only you can share the invite link'); await state.refresh(); }
       catch (err) { toast(err.message); e.target.checked = !e.target.checked; }
     });
     el.querySelector('#rotateBtn').addEventListener('click', async e => {
       e.target.disabled = true;
       try {
-        const code = await cloud.rotateInviteCode();
+        const code = await cloud.rotateInviteCode(state.tid());
         el.querySelector('#codeText').textContent = code;
         toast('New invite code ready');
         state.refresh();
@@ -183,20 +185,20 @@ function bindAccount() {
     el.querySelector('#tableNameBtn').addEventListener('click', async () => {
       const name = el.querySelector('#tableName').value.trim();
       if (!name) return;
-      try { await cloud.renameTable(name); toast('Table renamed'); await state.refresh(); }
+      try { await cloud.renameTable(state.tid(), name); toast('Table renamed'); await state.refresh(); }
       catch (err) { toast(err.message); }
     });
     el.querySelectorAll('[data-remove]').forEach(b => b.addEventListener('click', async () => {
       const row = b.closest('.member-row');
       const name = row.querySelector('b').textContent;
       if (!confirm('Remove ' + name + ' from the table?')) return;
-      try { await cloud.removeMember(b.dataset.remove); toast(name + ' removed'); await state.refresh(); }
+      try { await cloud.removeMember(state.tid(), b.dataset.remove); toast(name + ' removed'); await state.refresh(); }
       catch (err) { toast(err.message); }
     }));
   } else {
     el.querySelector('#leaveBtn').addEventListener('click', async () => {
       if (!confirm('Leave the table? You will need a new invite to come back.')) return;
-      try { await cloud.leaveTable(); await state.refresh(); location.hash = '#/'; }
+      try { await cloud.leaveTable(state.tid()); await state.refresh(); location.hash = '#/'; }
       catch (err) { toast(err.message); }
     });
   }
@@ -208,10 +210,10 @@ export async function render(root) {
   unsubs = [];
   unsubs.push(state.onChange(() => {
     // Avoid wiping inputs mid-typing: only re-render on membership changes.
-    const key = JSON.stringify([!!cloud.user(), state.S.status?.is_member, state.S.status?.is_host, state.S.status?.invite_code, state.S.status?.members_can_invite, state.S.members.length, state.S.profile?.goals, state.S.profile?.focus]);
+    const key = JSON.stringify([!!cloud.user(), state.S.tableId, state.S.tables.length, state.S.status?.is_member, state.S.status?.is_host, state.S.status?.invite_code, state.S.status?.members_can_invite, state.S.members.length, state.S.profile?.goals, state.S.profile?.focus]);
     if (key !== el.dataset.key) render(root);
   }));
-  el.dataset.key = JSON.stringify([!!cloud.user(), state.S.status?.is_member, state.S.status?.is_host, state.S.status?.invite_code, state.S.status?.members_can_invite, state.S.members.length, state.S.profile?.goals, state.S.profile?.focus]);
+  el.dataset.key = JSON.stringify([!!cloud.user(), state.S.tableId, state.S.tables.length, state.S.status?.is_member, state.S.status?.is_host, state.S.status?.invite_code, state.S.status?.members_can_invite, state.S.members.length, state.S.profile?.goals, state.S.profile?.focus]);
   if (!cloud.user()) {
     el.innerHTML = signInHtml();
     bindSignIn();

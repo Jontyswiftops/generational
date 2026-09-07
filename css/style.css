@@ -63,6 +63,8 @@ a { color: var(--accent2); }
   z-index: 100;
   border-bottom: 1px solid var(--line);
 }
+#topbar h1.switchable { cursor: pointer; }
+#topbar h1.switchable::after { content: '\25BE'; font-size: 0.8rem; color: var(--accent2); margin-left: 2px; }
 #topbar h1 {
   flex: 1;
   font-size: 1rem;

@@ -14,6 +14,7 @@ It is a discussion space between mates. Nothing in it is financial advice, and n
 - **Wins**: post wins, milestones and goals. Reactions, comments, and a "table form" strip.
 - **Talk**: "The table" everyday chat, five market channels (Economy, Property, Shares, Crypto, Business), private direct messages between members with unread badges and seen receipts, and a resource library of books, podcasts, articles and videos.
 - **Profiles**: every member writes what they are chasing and picks focus areas. Tap any seat or name to open their profile and message them.
+- **Tables**: more than one round table can exist. Only the app owner (the account listed in the app_owner table) can open a new one; each table has its own host, invite code, members, ideas, sessions, feed and chat. Tap the title in the top bar to switch or join another table. Direct messages work with anyone you share a table with.
 - **Me**: sign in, display name, password, goals. The host gets the invite code, share link, rename, member removal, and a switch that lets members share the invite link too.
 
 ## Stack
@@ -38,7 +39,7 @@ blender/build_table.py reproducible Blender script for the table asset
 3. Authentication, URL Configuration: set Site URL to `https://jontyswiftops.github.io/generational/` and add it as a redirect URL.
 4. Sign-in is email and password only. New accounts are auto-confirmed by a database trigger (see the end of `supabase/schema.sql`), so no email templates need editing. If someone forgets their password, the host resets it from the Supabase dashboard (Authentication, Users, Send password recovery, or set a new one directly).
 5. Push to GitHub, Settings, Pages: deploy from branch `main`, folder `/ (root)`.
-6. Open the app, create your account on the Me screen, press **Claim the host seat**, then share the invite link.
+6. Open the app, create your account on the Me screen, then in the SQL editor insert your user id into public.app_owner. Back in the app, open your first table from the Tables screen and share its invite link.
 
 ## Running locally
 

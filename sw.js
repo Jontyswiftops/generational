@@ -1,6 +1,6 @@
 // Generational service worker: network-first for same-origin requests,
 // cache fallback for offline. Bump CACHE and update ASSETS when files change.
-const CACHE = 'generational-v6';
+const CACHE = 'generational-v7';
 const ASSETS = [
   './',
   'index.html',
@@ -28,7 +28,8 @@ const ASSETS = [
   'js/views/feed.js',
   'js/views/talk.js',
   'js/views/me.js',
-  'js/views/member.js'
+  'js/views/member.js',
+  'js/views/tables.js'
 ];
 
 self.addEventListener('install', e => {

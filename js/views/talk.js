@@ -3,7 +3,7 @@
 import * as cloud from '../cloud.js';
 import * as state from '../state.js';
 import { esc, initials, fmtTime, timeAgo, toast, linkify, safeUrl, CHANNELS, RESOURCE_TYPES } from '../util.js';
-import { gate, handleKick, DISCLAIMER } from './shared.js';
+import { gate, handleKick, DISCLAIMER , gateKey } from './shared.js';
 
 export const title = 'Talk';
 
@@ -51,14 +51,14 @@ function paintChat() {
 
 async function loadChat() {
   try {
-    messages = await cloud.channelFeed(channel);
-    state.jset('talk:' + channel, messages);
+    messages = await cloud.channelFeed(state.tid(), channel);
+    state.jset('talk:' + state.tid() + ':' + channel, messages);
   } catch (err) { if (!handleKick(err)) toast('Could not load the channel: ' + err.message); }
   paintChat();
 }
 
 function renderChannel() {
-  messages = state.jget('talk:' + channel, []);
+  messages = state.jget('talk:' + state.tid() + ':' + channel, []);
   el.innerHTML = chipsHtml(channel) +
     '<div class="chat" id="chat"></div>' +
     '<div class="chatbar"><input type="text" id="chatInput" maxlength="2000" placeholder="' + (channel === 'table' ? 'Say something to the table' : 'Say something about ' + esc(CHANNELS[channel].toLowerCase())) + '" autocomplete="off">' +
@@ -70,7 +70,7 @@ function renderChannel() {
     if (!body) return;
     input.value = '';
     try {
-      await cloud.sendChannelMessage(channel, body);
+      await cloud.sendChannelMessage(state.tid(), channel, body);
       state.announce('talk', { channel });
       await loadChat();
     } catch (err) { toast(err.message); input.value = body; }
@@ -79,7 +79,7 @@ function renderChannel() {
   el.querySelector('#chatInput').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
   paintChat();
   loadChat();
-  unsubs.push(cloud.on('rt-table', 'talk', p => { if (!p.channel || p.channel === channel) loadChat(); }));
+  unsubs.push(cloud.on(state.tableChannel(), 'talk', p => { if (!p.channel || p.channel === channel) loadChat(); }));
 }
 
 // ---------- direct messages ----------
@@ -114,7 +114,7 @@ function renderThreads() {
   bindChips();
   paintThreads();
   loadThreads();
-  unsubs.push(cloud.on('rt-table', 'dm', loadThreads));
+  unsubs.push(cloud.on(state.userChannel(cloud.user().id), 'dm', loadThreads));
   unsubs.push(state.onChange(paintThreads));
 }
 
@@ -128,11 +128,11 @@ function dmHtml(m) {
 function paintDm() {
   const box = el?.querySelector('#dmList');
   if (!box) return;
-  const other = state.member(dmOther);
+  const other = state.member(dmOther) || threads.find(x => x.user_id === dmOther) || null;
   box.innerHTML = dmMsgs.length ? dmMsgs.map(dmHtml).join('') :
     '<div class="empty">No messages yet with ' + esc(other?.display_name || 'them') + '. Say g\'day.</div>';
   box.querySelectorAll('[data-deldm]').forEach(b => b.addEventListener('click', async () => {
-    try { await cloud.dmDelete(b.dataset.deldm); cloud.ping('rt-table', 'dm', { to: dmOther }); await loadDm(); }
+    try { await cloud.dmDelete(b.dataset.deldm); cloud.ping(state.userChannel(dmOther), 'dm'); await loadDm(); }
     catch (err) { toast(err.message); }
   }));
   window.scrollTo(0, document.body.scrollHeight);
@@ -144,7 +144,7 @@ async function loadDm() {
     state.jset('dm:' + dmOther, dmMsgs);
     if (dmMsgs.some(m => m.sender_id === dmOther && !m.read_at)) {
       await cloud.dmMarkRead(dmOther);
-      cloud.ping('rt-table', 'dm', { to: dmOther });
+      cloud.ping(state.userChannel(dmOther), 'dm');
       state.refreshUnread();
     }
   } catch (err) { if (!handleKick(err)) toast('Could not load the conversation: ' + err.message); }
@@ -154,7 +154,8 @@ async function loadDm() {
 function renderDm(uid) {
   dmOther = uid;
   dmMsgs = state.jget('dm:' + uid, []);
-  const other = state.member(uid);
+  if (!threads.length) threads = state.jget('dm:threads', []);
+  const other = state.member(uid) || threads.find(x => x.user_id === uid) || null;
   el.innerHTML =
     '<a class="thread" href="#/member/' + uid + '" style="margin-bottom:12px">' +
     '<span class="avatar' + (state.onlineIds().has(uid) ? ' on' : '') + '">' + esc(initials(other?.display_name || '?')) + '</span>' +
@@ -169,7 +170,7 @@ function renderDm(uid) {
     input.value = '';
     try {
       await cloud.dmSend(uid, body);
-      cloud.ping('rt-table', 'dm', { to: uid });
+      cloud.ping(state.userChannel(uid), 'dm');
       await loadDm();
     } catch (err) { toast(err.message); input.value = body; }
   };
@@ -177,7 +178,7 @@ function renderDm(uid) {
   el.querySelector('#dmInput').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
   paintDm();
   loadDm();
-  unsubs.push(cloud.on('rt-table', 'dm', p => { if (!p.to || p.to === cloud.user()?.id) loadDm(); }));
+  unsubs.push(cloud.on(state.userChannel(cloud.user().id), 'dm', () => loadDm()));
 }
 
 // ---------- resources ----------
@@ -206,14 +207,14 @@ function paintResources() {
 
 async function loadResources() {
   try {
-    resources = await cloud.listResources();
-    state.jset('resources', resources);
+    resources = await cloud.listResources(state.tid());
+    state.jset('resources:' + state.tid(), resources);
   } catch (err) { if (!handleKick(err)) toast('Could not load resources: ' + err.message); }
   paintResources();
 }
 
 function renderResources() {
-  resources = state.jget('resources', []);
+  resources = state.jget('resources:' + state.tid(), []);
   el.innerHTML = chipsHtml('res') +
     '<div class="card"><h3>Share a resource</h3>' +
     '<label>Link<input type="url" id="rUrl" maxlength="500" placeholder="https://"></label>' +
@@ -234,7 +235,7 @@ function renderResources() {
     if (!f.url || !f.title) { status.textContent = 'A link and a title are needed.'; return; }
     e.target.disabled = true;
     try {
-      await cloud.addResource(f);
+      await cloud.addResource({ ...f, table_id: state.tid() });
       state.announce('resources');
       toast('Added to the library');
       ['#rUrl', '#rTitle', '#rTake'].forEach(s => { el.querySelector(s).value = ''; });
@@ -245,7 +246,7 @@ function renderResources() {
   });
   paintResources();
   loadResources();
-  unsubs.push(cloud.on('rt-table', 'resources', loadResources));
+  unsubs.push(cloud.on(state.tableChannel(), 'resources', loadResources));
 }
 
 // ---------- entry ----------
@@ -254,7 +255,6 @@ export async function render(root, param) {
   el = root;
   unsubs.forEach(fn => fn());
   unsubs = [];
-  const gateKey = () => JSON.stringify([!!cloud.user(), !!state.S.status, state.isMember(), state.S.status?.host_claimed]);
   const startKey = gateKey();
   unsubs.push(state.onChange(() => { if (gateKey() !== startKey) render(root, param); }));
   if (!gate(el)) return;
