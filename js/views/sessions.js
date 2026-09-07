@@ -366,7 +366,11 @@ async function renderRoom(id) {
 
 export async function render(root, id, mode) {
   el = root;
-  unsubs.push(state.onChange(() => { if (!state.isMember() || !el.dataset.ready) render(root, id, mode); }));
+  unsubs.forEach(fn => fn());
+  unsubs = [];
+  const gateKey = () => JSON.stringify([!!cloud.user(), !!state.S.status, state.isMember(), state.S.status?.host_claimed]);
+  const startKey = gateKey();
+  unsubs.push(state.onChange(() => { if (gateKey() !== startKey) render(root, id, mode); }));
   if (!gate(el)) return;
   el.dataset.ready = '1';
   const hash = location.hash;

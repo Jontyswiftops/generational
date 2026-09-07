@@ -17,8 +17,17 @@ export function onChange(cb) {
   cbs.add(cb);
   return () => cbs.delete(cb);
 }
+let emitting = false;
+let emitAgain = false;
 function emit() {
-  cbs.forEach(cb => { try { cb(); } catch (e) { console.error(e); } });
+  if (emitting) { emitAgain = true; return; }
+  emitting = true;
+  try {
+    [...cbs].forEach(cb => { try { cb(); } catch (e) { console.error(e); } });
+  } finally {
+    emitting = false;
+  }
+  if (emitAgain) { emitAgain = false; queueMicrotask(emit); }
 }
 
 const key = k => 'gen:' + (cloud.user()?.id || 'none') + ':' + k;

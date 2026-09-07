@@ -252,7 +252,11 @@ function renderResources() {
 
 export async function render(root, param) {
   el = root;
-  unsubs.push(state.onChange(() => { if (!state.isMember() || !el.dataset.ready) render(root, param); }));
+  unsubs.forEach(fn => fn());
+  unsubs = [];
+  const gateKey = () => JSON.stringify([!!cloud.user(), !!state.S.status, state.isMember(), state.S.status?.host_claimed]);
+  const startKey = gateKey();
+  unsubs.push(state.onChange(() => { if (gateKey() !== startKey) render(root, param); }));
   if (!gate(el)) return;
   el.dataset.ready = '1';
   const hash = location.hash;

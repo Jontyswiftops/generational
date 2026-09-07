@@ -42,7 +42,11 @@ function paint(uid) {
 
 export async function render(root, uid) {
   el = root;
-  unsubs.push(state.onChange(() => { if (!state.isMember()) render(root, uid); else paint(uid); }));
+  unsubs.forEach(fn => fn());
+  unsubs = [];
+  const gateKey = () => JSON.stringify([!!cloud.user(), !!state.S.status, state.isMember(), state.S.status?.host_claimed]);
+  const startKey = gateKey();
+  unsubs.push(state.onChange(() => { if (gateKey() !== startKey) render(root, uid); else if (state.isMember()) paint(uid); }));
   if (!gate(el)) return;
   paint(uid);
   state.refresh({ throttle: true });

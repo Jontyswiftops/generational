@@ -109,7 +109,11 @@ async function load() {
 
 export async function render(root) {
   el = root;
-  unsubs.push(state.onChange(() => { if (!state.isMember() || !el.dataset.ready) render(root); else paintStrip(); }));
+  unsubs.forEach(fn => fn());
+  unsubs = [];
+  const gateKey = () => JSON.stringify([!!cloud.user(), !!state.S.status, state.isMember(), state.S.status?.host_claimed]);
+  const startKey = gateKey();
+  unsubs.push(state.onChange(() => { if (gateKey() !== startKey) render(root); else if (state.isMember()) paintStrip(); }));
   if (!gate(el)) return;
   el.dataset.ready = '1';
   posts = state.jget('feed', []);

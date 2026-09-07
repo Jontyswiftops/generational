@@ -126,9 +126,13 @@ async function mount3d(hero) {
 
 export async function render(root) {
   el = root;
+  unsubs.forEach(fn => fn());
+  unsubs = [];
+  const gateKey = () => JSON.stringify([!!cloud.user(), !!state.S.status, state.isMember(), state.S.status?.host_claimed]);
+  const startKey = gateKey();
   unsubs.push(state.onChange(() => {
-    if (!state.isMember() || !el.querySelector('#seatList')) render(root);
-    else paint();
+    if (gateKey() !== startKey || (state.isMember() && !el.querySelector('#seatList'))) render(root);
+    else if (state.isMember()) paint();
   }));
   if (!gate(el)) return;
 

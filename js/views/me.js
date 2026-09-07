@@ -204,6 +204,8 @@ function bindAccount() {
 
 export async function render(root) {
   el = root;
+  unsubs.forEach(fn => fn());
+  unsubs = [];
   unsubs.push(state.onChange(() => {
     // Avoid wiping inputs mid-typing: only re-render on membership changes.
     const key = JSON.stringify([!!cloud.user(), state.S.status?.is_member, state.S.status?.is_host, state.S.status?.invite_code, state.S.status?.members_can_invite, state.S.members.length, state.S.profile?.goals, state.S.profile?.focus]);
