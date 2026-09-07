@@ -369,7 +369,7 @@ label.check input { width: 17px; height: 17px; accent-color: var(--accent); }
 /* ---------- home / table ---------- */
 .hero3d {
   position: relative;
-  height: 300px;
+  height: 340px;
   border-radius: var(--radius);
   overflow: hidden;
   border: 1px solid rgba(212, 168, 75, 0.25);
@@ -592,5 +592,5 @@ a.item:hover { background: var(--card2); border-color: var(--line2); }
     background: rgba(8, 11, 20, 0.92);
   }
   #tabbar a { min-width: 86px; }
-  .hero3d { height: 340px; }
+  .hero3d { height: 400px; }
 }
