@@ -57,6 +57,10 @@ export async function myProfile() {
 export const saveDisplayName = name =>
   run(sb.from('profiles').update({ display_name: name }).eq('id', user().id));
 
+// patch: { display_name?, goals?, focus? }
+export const saveProfile = patch =>
+  run(sb.from('profiles').update(patch).eq('id', user().id));
+
 // ---- membership ----
 
 export const tableStatus = () => rpc('table_status');
@@ -67,6 +71,17 @@ export const removeMember = uid => rpc('remove_member', { uid });
 export const leaveTable = () => rpc('leave_table');
 export const renameTable = name => rpc('rename_table', { p_name: name });
 export const tableMembers = () => rpc('table_members');
+export const setMembersCanInvite = on => rpc('set_members_can_invite', { p_on: on });
+
+// ---- direct messages ----
+
+export const dmThreads = () => rpc('dm_threads');
+export const dmThread = (other, lim = 100) => rpc('dm_thread', { other, lim });
+export const dmMarkRead = other => rpc('dm_mark_read', { other });
+export const dmUnread = () => rpc('dm_unread');
+export const dmSend = (recipientId, body) =>
+  run(sb.from('dms').insert({ sender_id: user().id, recipient_id: recipientId, body }));
+export const dmDelete = id => run(sb.from('dms').delete().eq('id', id));
 
 // ---- ideas ----
 

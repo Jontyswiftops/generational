@@ -106,11 +106,22 @@ export const IDEA_STATUS = {
 };
 
 export const CHANNELS = {
+  table: 'The table',
   economy: 'Economy',
   property: 'Property',
   shares: 'Shares',
   crypto: 'Crypto',
   business: 'Business'
+};
+
+export const FOCUS = {
+  business: 'Business',
+  property: 'Property',
+  shares: 'Shares',
+  crypto: 'Crypto',
+  side_hustle: 'Side hustle',
+  mindset: 'Mindset',
+  family: 'Family wealth'
 };
 
 export const RESOURCE_TYPES = {

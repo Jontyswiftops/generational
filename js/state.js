@@ -8,6 +8,7 @@ export const S = {
   profile: null,    // my profiles row
   members: [],      // table_members() rows
   presence: {},     // presenceState() of rt-table: uid -> [{...meta}]
+  unread: 0,        // unread direct messages
   error: null
 };
 
@@ -40,6 +41,7 @@ export function reset() {
   S.profile = null;
   S.members = [];
   S.presence = {};
+  S.unread = 0;
   S.error = null;
   tableJoined = false;
   emit();
@@ -60,11 +62,12 @@ export function refresh({ throttle = false } = {}) {
       jset('status', status);
       jset('profile', profile);
       if (status.is_member) {
-        S.members = await cloud.tableMembers();
+        [S.members, S.unread] = await Promise.all([cloud.tableMembers(), cloud.dmUnread().catch(() => 0)]);
         jset('members', S.members);
         joinTableChannel();
       } else {
         S.members = [];
+        S.unread = 0;
       }
       S.error = null;
       lastFetch = Date.now();
@@ -95,6 +98,7 @@ function joinTableChannel() {
     S.presence = state;
     emit();
   });
+  cloud.on('rt-table', 'dm', p => { if (!p.to || p.to === cloud.user()?.id) refreshUnread(); });
   trackSelf();
 }
 
@@ -145,6 +149,14 @@ export function seats() {
     };
   });
 }
+
+export async function refreshUnread() {
+  if (!cloud.user() || !isMember()) return;
+  try { S.unread = await cloud.dmUnread(); emit(); } catch {}
+}
+
+export const me = () => S.members.find(m => m.is_self) || null;
+export const member = uid => S.members.find(m => m.user_id === uid) || null;
 
 // Fire a table-wide ping and refresh our own copy.
 export function announce(event, payload = {}) {

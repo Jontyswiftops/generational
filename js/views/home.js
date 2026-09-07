@@ -26,13 +26,20 @@ function seatRow(s) {
   const dot = s.active ? 'active' : (s.online ? 'on' : '');
   const sub = s.active ? (s.view && /\/live$/.test(s.view) ? 'In the room' : 'Active now')
     : s.online ? 'Online' : (s.lastActiveAt ? 'Active ' + timeAgo(s.lastActiveAt) : 'Not active yet');
-  return '<div class="seat">' +
+  return '<a class="seat" href="#/member/' + s.id + '">' +
     '<span class="avatar' + (s.online ? ' on' : '') + '">' + esc(initials(s.name)) + '</span>' +
     '<div class="grow"><div class="name"><span class="dot ' + dot + '"></span>' + esc(s.name) +
     (s.isHost ? ' <span class="pill gold">Host</span>' : '') + (s.isSelf ? ' <span class="pill">You</span>' : '') + '</div>' +
     '<div class="sub">' + sub + '</div></div>' +
     '<div class="pts">' + s.points + '<small>' + (s.streak ? s.streak + ' session streak' : 'points') + '</small></div>' +
-    '</div>';
+    '</a>';
+}
+
+function goalsNudge() {
+  const p = state.S.profile;
+  if (!p || p.goals) return '';
+  return '<a class="card gold" href="#/me" style="display:block;text-decoration:none;color:inherit"><h3>Tell the table what you are chasing</h3>' +
+    '<p class="hint" style="margin:0">Add your goals and focus areas so your mates know what to back you on. Takes a minute.</p></a>';
 }
 
 function nextSessionCard() {
@@ -65,7 +72,7 @@ function paint() {
   if (list) list.innerHTML = seats.length ? seats.map(seatRow).join('') :
     '<div class="empty">Just you so far. Share your invite code from the Me screen.</div>';
   const next = el.querySelector('#nextSession');
-  if (next) next.innerHTML = nextSessionCard();
+  if (next) next.innerHTML = goalsNudge() + nextSessionCard();
   if (table) {
     table.setMembers(seats.map(s => ({ ...s, initials: initials(s.name) })));
     table.setSessionTitle(nextSession ? nextSession.title : '');
@@ -99,7 +106,11 @@ async function mount3d(hero) {
         (seat.lastActiveAt ? 'Active ' + timeAgo(seat.lastActiveAt) : 'Not active yet');
       tip.innerHTML = '<b>' + esc(seat.name) + '</b>' + (seat.isHost ? ' <span class="pill gold">Host</span>' : '') +
         '<small>' + sub + ' &middot; ' + seat.points + ' pts</small>';
+      const prev = hero.querySelector('.seat-tip');
+      if (prev && prev.dataset.uid === seat.id) { location.hash = '#/member/' + seat.id; return; }
       hero.querySelectorAll('.seat-tip').forEach(t => t.remove());
+      tip.dataset.uid = seat.id;
+      tip.innerHTML += '<small>Tap again for profile</small>';
       hero.appendChild(tip);
       clearTimeout(tipTimer);
       tipTimer = setTimeout(() => tip.remove(), 2600);

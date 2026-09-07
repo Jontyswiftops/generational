@@ -1,7 +1,7 @@
 // Me: sign in, account, membership, and host tools.
 import * as cloud from '../cloud.js';
 import * as state from '../state.js';
-import { esc, initials, toast, timeAgo } from '../util.js';
+import { esc, initials, toast, timeAgo, FOCUS } from '../util.js';
 import { joinCard, bindJoin, DISCLAIMER } from './shared.js';
 
 export const title = 'Me';
@@ -65,6 +65,16 @@ function accountHtml() {
     '<div class="hint" id="setPwStatus"></div>' +
     '<button class="linkbtn" id="signOutBtn">Sign out</button></div>';
 
+  const p = state.S.profile || {};
+  const focus = new Set(p.focus || []);
+  html += '<div class="card' + (p.goals ? '' : ' gold') + '"><h3>What you are chasing</h3>' +
+    '<p class="hint" style="margin-top:0">Tell the table what you want out of this. Your goals show on your profile so mates know what to back you on.</p>' +
+    '<textarea id="goalsInput" maxlength="600" placeholder="e.g. Two investment properties by 35. Replace my salary with business income. Set the kids up so they never start from zero.">' + esc(p.goals || '') + '</textarea>' +
+    '<label class="mt" style="margin-bottom:0">Focus areas</label>' +
+    '<div class="focus-chips" id="focusChips">' + Object.entries(FOCUS).map(([k, v]) =>
+      '<button type="button" data-focus="' + k + '"' + (focus.has(k) ? ' class="on"' : '') + '>' + v + '</button>').join('') + '</div>' +
+    '<button class="btn primary" id="goalsBtn">Save goals</button></div>';
+
   if (!s) {
     html += '<div class="empty">Checking your seat&hellip;</div>';
   } else if (!s.is_member) {
@@ -73,15 +83,19 @@ function accountHtml() {
     html += '<div class="card"><h3>' + esc(s.name) + '</h3>' +
       '<p class="hint" style="margin-top:0">' + (s.is_host ? 'You host this table.' : 'You have a seat at this table.') +
       ' ' + s.member_count + ' member' + (s.member_count === 1 ? '' : 's') + '.</p>';
-    if (s.is_host) {
+    if (s.can_invite) {
       html += '<div class="row invite"><span>Invite code</span><span class="code" id="codeText">' + esc(s.invite_code || '') + '</span></div>' +
         '<div class="row"><button class="btn primary grow" id="shareBtn">Share invite link</button>' +
-        '<button class="btn" id="rotateBtn" title="New code">New code</button></div>' +
-        '<p class="hint">Anyone with the code can join. Make a new code if it gets around.</p>' +
+        (s.is_host ? '<button class="btn" id="rotateBtn" title="New code">New code</button>' : '') + '</div>' +
+        '<p class="hint">Anyone with the code can join. ' + (s.is_host ? 'Make a new code if it gets around.' : 'Only invite people who fit the table.') + '</p>';
+    }
+    if (s.is_host) {
+      html += '<label class="check"><input type="checkbox" id="inviteToggle"' + (s.members_can_invite ? ' checked' : '') + '> Members can share the invite link too</label>' +
         '<label for="tableName" class="mt">Table name</label>' +
         '<div class="row"><input type="text" id="tableName" maxlength="60" value="' + esc(s.name) + '">' +
         '<button class="btn sm" id="tableNameBtn">Save</button></div>';
-    } else {
+    }
+    if (!s.is_host) {
       html += '<button class="btn subtle danger" id="leaveBtn">Leave the table</button>';
     }
     html += '</div>';
@@ -89,8 +103,8 @@ function accountHtml() {
     html += '<div class="card"><h3>Members</h3><div id="memberList">' +
       state.S.members.map(m =>
         '<div class="member-row" data-uid="' + m.user_id + '">' +
-        '<span class="avatar">' + esc(initials(m.display_name)) + '</span>' +
-        '<div class="grow"><b>' + esc(m.display_name) + '</b>' + (m.role === 'host' ? ' <span class="pill gold">Host</span>' : '') +
+        '<a href="#/member/' + m.user_id + '" class="avatar" style="text-decoration:none">' + esc(initials(m.display_name)) + '</a>' +
+        '<div class="grow"><b><a href="#/member/' + m.user_id + '" style="color:inherit;text-decoration:none">' + esc(m.display_name) + '</a></b>' + (m.role === 'host' ? ' <span class="pill gold">Host</span>' : '') +
         '<small>Joined ' + timeAgo(m.joined_at) + ' &middot; ' + m.points + ' pts</small></div>' +
         (s.is_host && m.role !== 'host' ? '<button class="btn sm danger" data-remove="' + m.user_id + '">Remove</button>' : '') +
         '</div>').join('') + '</div></div>';
@@ -124,11 +138,23 @@ function bindAccount() {
     else { el.querySelector('#setPwInput').value = ''; status.textContent = 'Password set. You can now sign in with it on any device.'; }
   });
   el.querySelector('#signOutBtn').addEventListener('click', () => cloud.signOut());
+  el.querySelectorAll('[data-focus]').forEach(b => b.addEventListener('click', () => b.classList.toggle('on')));
+  el.querySelector('#goalsBtn').addEventListener('click', async e => {
+    const goals = el.querySelector('#goalsInput').value.trim() || null;
+    const focus = [...el.querySelectorAll('[data-focus].on')].map(b => b.dataset.focus);
+    e.target.disabled = true;
+    try {
+      await cloud.saveProfile({ goals, focus });
+      toast('Goals saved. The table can see them on your profile.');
+      await state.refresh();
+    } catch (err) { toast('Could not save: ' + err.message); }
+    e.target.disabled = false;
+  });
 
   if (!s) return;
   if (!s.is_member) { bindJoin(el); return; }
 
-  if (s.is_host) {
+  if (s.can_invite) {
     el.querySelector('#shareBtn').addEventListener('click', async () => {
       const url = inviteLink(s.invite_code);
       const text = 'You have a seat at ' + s.name + ' on Generational. Code: ' + s.invite_code;
@@ -138,6 +164,12 @@ function bindAccount() {
         try { await navigator.clipboard.writeText(url + '\n' + text); toast('Invite link copied'); }
         catch { toast('Invite code: ' + s.invite_code); }
       }
+    });
+  }
+  if (s.is_host) {
+    el.querySelector('#inviteToggle').addEventListener('change', async e => {
+      try { await cloud.setMembersCanInvite(e.target.checked); toast(e.target.checked ? 'Members can now share the invite link' : 'Only you can share the invite link'); await state.refresh(); }
+      catch (err) { toast(err.message); e.target.checked = !e.target.checked; }
     });
     el.querySelector('#rotateBtn').addEventListener('click', async e => {
       e.target.disabled = true;
@@ -174,10 +206,10 @@ export async function render(root) {
   el = root;
   unsubs.push(state.onChange(() => {
     // Avoid wiping inputs mid-typing: only re-render on membership changes.
-    const key = JSON.stringify([!!cloud.user(), state.S.status?.is_member, state.S.status?.is_host, state.S.status?.invite_code, state.S.members.length]);
+    const key = JSON.stringify([!!cloud.user(), state.S.status?.is_member, state.S.status?.is_host, state.S.status?.invite_code, state.S.status?.members_can_invite, state.S.members.length, state.S.profile?.goals, state.S.profile?.focus]);
     if (key !== el.dataset.key) render(root);
   }));
-  el.dataset.key = JSON.stringify([!!cloud.user(), state.S.status?.is_member, state.S.status?.is_host, state.S.status?.invite_code, state.S.members.length]);
+  el.dataset.key = JSON.stringify([!!cloud.user(), state.S.status?.is_member, state.S.status?.is_host, state.S.status?.invite_code, state.S.status?.members_can_invite, state.S.members.length, state.S.profile?.goals, state.S.profile?.focus]);
   if (!cloud.user()) {
     el.innerHTML = signInHtml();
     bindSignIn();

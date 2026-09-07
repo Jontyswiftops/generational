@@ -8,6 +8,7 @@ import * as sessions from './views/sessions.js';
 import * as feed from './views/feed.js';
 import * as talk from './views/talk.js';
 import * as me from './views/me.js';
+import * as member from './views/member.js';
 
 const PENDING_JOIN = 'gen:pendingJoin';
 
@@ -24,6 +25,9 @@ const routes = [
   { re: /^#\/talk$/, view: talk, tab: 'talk' },
   { re: /^#\/talk\/([a-z_]+)$/, view: talk, tab: 'talk' },
   { re: /^#\/resources$/, view: talk, tab: 'talk', back: true },
+  { re: /^#\/dm$/, view: talk, tab: 'talk', back: true },
+  { re: /^#\/dm\/([0-9a-f-]{36})$/, view: talk, tab: 'talk', back: true },
+  { re: /^#\/member\/([0-9a-f-]{36})$/, view: member, tab: 'home', back: true },
   { re: /^#\/me$/, view: me, tab: null, back: true }
 ];
 
@@ -99,8 +103,14 @@ window.addEventListener('hashchange', route);
 
 // ---- header ----
 
+const talkBadge = document.getElementById('talkBadge');
+
 function paintHeader() {
   titleEl.textContent = state.tableName();
+  if (talkBadge) {
+    talkBadge.hidden = !(state.S.unread > 0);
+    talkBadge.textContent = state.S.unread > 9 ? '9+' : String(state.S.unread || '');
+  }
   const u = cloud.user();
   if (u) {
     meInitials.textContent = initials(state.myName() || u.email);

@@ -159,6 +159,33 @@ a { color: var(--accent2); }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+#tabbar a { position: relative; }
+.tab-badge {
+  position: absolute;
+  top: 2px;
+  left: calc(50% + 6px);
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent2);
+  color: #1a1305;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 17px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--bg0);
+}
+.focus-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.focus-chips button { background: var(--card2); border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+.focus-chips button.on { background: var(--accent-dim); color: var(--accent2); border-color: rgba(212, 168, 75, 0.45); }
+.goals { white-space: pre-wrap; line-height: 1.55; font-size: 0.95rem; }
+.thread { display: flex; align-items: center; gap: 12px; padding: 11px 12px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-sm); margin-bottom: 6px; text-decoration: none; color: var(--text); }
+.thread .grow { flex: 1; min-width: 0; }
+.thread b { display: block; font-size: 0.95rem; }
+.thread .last { color: var(--muted); font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thread .unread { background: var(--accent2); color: #1a1305; font-size: 0.68rem; font-weight: 800; border-radius: 999px; min-width: 20px; height: 20px; line-height: 20px; text-align: center; padding: 0 6px; }
+.thread small { color: var(--muted); font-size: 0.7rem; }
 #tabbar a:hover { color: var(--text); }
 #tabbar a.on { color: var(--accent2); background: var(--accent-dim); }
 

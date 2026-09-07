@@ -1,16 +1,31 @@
-// Talk: market channels (realtime chat) and the resource library.
+// Talk: the table chat and market channels (realtime), direct messages,
+// and the resource library.
 import * as cloud from '../cloud.js';
 import * as state from '../state.js';
-import { esc, fmtTime, timeAgo, toast, linkify, safeUrl, CHANNELS, RESOURCE_TYPES } from '../util.js';
+import { esc, initials, fmtTime, timeAgo, toast, linkify, safeUrl, CHANNELS, RESOURCE_TYPES } from '../util.js';
 import { gate, handleKick, DISCLAIMER } from './shared.js';
 
 export const title = 'Talk';
 
 let unsubs = [];
 let el = null;
-let channel = 'economy';
+let channel = 'table';
 let messages = [];
 let resources = [];
+let threads = [];
+let dmMsgs = [];
+let dmOther = null;
+
+const chipsHtml = (active) =>
+  '<div class="chips">' +
+  '<button data-go="#/dm"' + (active === 'dm' ? ' class="on"' : '') + '>✉️ Messages' + (state.S.unread ? ' (' + state.S.unread + ')' : '') + '</button>' +
+  Object.entries(CHANNELS).map(([k, v]) =>
+    '<button data-go="#/talk/' + k + '"' + (active === k ? ' class="on"' : '') + '>' + v + '</button>').join('') +
+  '<button data-go="#/resources"' + (active === 'res' ? ' class="on"' : '') + '>📚 Resources</button></div>';
+
+function bindChips() {
+  el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { location.hash = b.dataset.go; }));
+}
 
 // ---------- channel chat ----------
 
@@ -26,7 +41,7 @@ function paintChat() {
   const box = el?.querySelector('#chat');
   if (!box) return;
   box.innerHTML = messages.length ? messages.map(msgHtml).join('') :
-    '<div class="empty">Quiet in here. Start the conversation about ' + esc(CHANNELS[channel]) + '.</div>';
+    '<div class="empty">' + (channel === 'table' ? 'Quiet in here. This is the everyday chat for the whole table.' : 'Quiet in here. Start the conversation about ' + esc(CHANNELS[channel]) + '.') + '</div>';
   box.querySelectorAll('[data-delmsg]').forEach(b => b.addEventListener('click', async () => {
     try { await cloud.deleteChannelMessage(b.dataset.delmsg); state.announce('talk', { channel }); await loadChat(); }
     catch (err) { toast(err.message); }
@@ -44,15 +59,11 @@ async function loadChat() {
 
 function renderChannel() {
   messages = state.jget('talk:' + channel, []);
-  el.innerHTML =
-    '<div class="chips">' + Object.entries(CHANNELS).map(([k, v]) =>
-      '<button data-ch="' + k + '"' + (channel === k ? ' class="on"' : '') + '>' + v + '</button>').join('') +
-    '<button data-res="1">📚 Resources</button></div>' +
+  el.innerHTML = chipsHtml(channel) +
     '<div class="chat" id="chat"></div>' +
-    '<div class="chatbar"><input type="text" id="chatInput" maxlength="2000" placeholder="Say something about ' + esc(CHANNELS[channel].toLowerCase()) + '" autocomplete="off">' +
+    '<div class="chatbar"><input type="text" id="chatInput" maxlength="2000" placeholder="' + (channel === 'table' ? 'Say something to the table' : 'Say something about ' + esc(CHANNELS[channel].toLowerCase())) + '" autocomplete="off">' +
     '<button class="btn primary" id="chatSend">Send</button></div>' + DISCLAIMER;
-  el.querySelectorAll('[data-ch]').forEach(b => b.addEventListener('click', () => { location.hash = '#/talk/' + b.dataset.ch; }));
-  el.querySelector('[data-res]').addEventListener('click', () => { location.hash = '#/resources'; });
+  bindChips();
   const send = async () => {
     const input = el.querySelector('#chatInput');
     const body = input.value.trim();
@@ -69,6 +80,104 @@ function renderChannel() {
   paintChat();
   loadChat();
   unsubs.push(cloud.on('rt-table', 'talk', p => { if (!p.channel || p.channel === channel) loadChat(); }));
+}
+
+// ---------- direct messages ----------
+
+function threadHtml(t) {
+  return '<a class="thread" href="#/dm/' + t.user_id + '">' +
+    '<span class="avatar' + (state.onlineIds().has(t.user_id) ? ' on' : '') + '">' + esc(initials(t.display_name)) + '</span>' +
+    '<div class="grow"><b>' + esc(t.display_name) + '</b>' +
+    '<div class="last">' + (t.last_body ? (t.last_mine ? 'You: ' : '') + esc(t.last_body) : 'Start a conversation') + '</div></div>' +
+    (t.unread ? '<span class="unread">' + t.unread + '</span>' : (t.last_at ? '<small>' + timeAgo(t.last_at) + '</small>' : '')) + '</a>';
+}
+
+function paintThreads() {
+  const box = el?.querySelector('#threads');
+  if (!box) return;
+  box.innerHTML = threads.length ? threads.map(threadHtml).join('') :
+    '<div class="empty">Just you at the table so far. Once mates join, you can message them here.</div>';
+}
+
+async function loadThreads() {
+  try {
+    threads = await cloud.dmThreads();
+    state.jset('dm:threads', threads);
+  } catch (err) { if (!handleKick(err)) toast('Could not load messages: ' + err.message); }
+  paintThreads();
+}
+
+function renderThreads() {
+  threads = state.jget('dm:threads', []);
+  el.innerHTML = chipsHtml('dm') + '<h3>Direct messages</h3><div id="threads"></div>' +
+    '<p class="hint">Private between the two of you. Keep it at the table.</p>' + DISCLAIMER;
+  bindChips();
+  paintThreads();
+  loadThreads();
+  unsubs.push(cloud.on('rt-table', 'dm', loadThreads));
+  unsubs.push(state.onChange(paintThreads));
+}
+
+function dmHtml(m) {
+  const mine = m.sender_id === cloud.user()?.id;
+  return '<div class="msg' + (mine ? ' me' : '') + '">' +
+    '<div class="bubble">' + linkify(esc(m.body)) + '</div>' +
+    '<small class="t">' + fmtTime(m.created_at) + (mine ? (m.read_at ? ' &middot; seen' : '') + ' &middot; <button class="linkbtn" style="display:inline;padding:0;font-size:.66rem" data-deldm="' + m.id + '">delete</button>' : '') + '</small></div>';
+}
+
+function paintDm() {
+  const box = el?.querySelector('#dmList');
+  if (!box) return;
+  const other = state.member(dmOther);
+  box.innerHTML = dmMsgs.length ? dmMsgs.map(dmHtml).join('') :
+    '<div class="empty">No messages yet with ' + esc(other?.display_name || 'them') + '. Say g\'day.</div>';
+  box.querySelectorAll('[data-deldm]').forEach(b => b.addEventListener('click', async () => {
+    try { await cloud.dmDelete(b.dataset.deldm); cloud.ping('rt-table', 'dm', { to: dmOther }); await loadDm(); }
+    catch (err) { toast(err.message); }
+  }));
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+async function loadDm() {
+  try {
+    dmMsgs = await cloud.dmThread(dmOther);
+    state.jset('dm:' + dmOther, dmMsgs);
+    if (dmMsgs.some(m => m.sender_id === dmOther && !m.read_at)) {
+      await cloud.dmMarkRead(dmOther);
+      cloud.ping('rt-table', 'dm', { to: dmOther });
+      state.refreshUnread();
+    }
+  } catch (err) { if (!handleKick(err)) toast('Could not load the conversation: ' + err.message); }
+  paintDm();
+}
+
+function renderDm(uid) {
+  dmOther = uid;
+  dmMsgs = state.jget('dm:' + uid, []);
+  const other = state.member(uid);
+  el.innerHTML =
+    '<a class="thread" href="#/member/' + uid + '" style="margin-bottom:12px">' +
+    '<span class="avatar' + (state.onlineIds().has(uid) ? ' on' : '') + '">' + esc(initials(other?.display_name || '?')) + '</span>' +
+    '<div class="grow"><b>' + esc(other?.display_name || 'Member') + '</b><div class="last">View profile</div></div></a>' +
+    '<div class="chat" id="dmList"></div>' +
+    '<div class="chatbar"><input type="text" id="dmInput" maxlength="2000" placeholder="Message ' + esc((other?.display_name || '').split(' ')[0]) + '" autocomplete="off">' +
+    '<button class="btn primary" id="dmSend">Send</button></div>' + DISCLAIMER;
+  const send = async () => {
+    const input = el.querySelector('#dmInput');
+    const body = input.value.trim();
+    if (!body) return;
+    input.value = '';
+    try {
+      await cloud.dmSend(uid, body);
+      cloud.ping('rt-table', 'dm', { to: uid });
+      await loadDm();
+    } catch (err) { toast(err.message); input.value = body; }
+  };
+  el.querySelector('#dmSend').addEventListener('click', send);
+  el.querySelector('#dmInput').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+  paintDm();
+  loadDm();
+  unsubs.push(cloud.on('rt-table', 'dm', p => { if (!p.to || p.to === cloud.user()?.id) loadDm(); }));
 }
 
 // ---------- resources ----------
@@ -105,7 +214,7 @@ async function loadResources() {
 
 function renderResources() {
   resources = state.jget('resources', []);
-  el.innerHTML =
+  el.innerHTML = chipsHtml('res') +
     '<div class="card"><h3>Share a resource</h3>' +
     '<label>Link<input type="url" id="rUrl" maxlength="500" placeholder="https://"></label>' +
     '<label>Title<input type="text" id="rTitle" maxlength="160" placeholder="Name of the book, episode, or article"></label>' +
@@ -113,6 +222,7 @@ function renderResources() {
     '<label>Your take (optional)<textarea id="rTake" maxlength="600" placeholder="One or two lines on why it is worth their time"></textarea></label>' +
     '<button class="btn primary big" id="rAdd" style="margin-bottom:0">Add to the library</button><div class="hint" id="rStatus"></div></div>' +
     '<div id="resList"></div>' + DISCLAIMER;
+  bindChips();
   el.querySelector('#rAdd').addEventListener('click', async e => {
     const f = {
       url: safeUrl(el.querySelector('#rUrl').value),
@@ -140,13 +250,16 @@ function renderResources() {
 
 // ---------- entry ----------
 
-export async function render(root, slug) {
+export async function render(root, param) {
   el = root;
-  unsubs.push(state.onChange(() => { if (!state.isMember() || !el.dataset.ready) render(root, slug); }));
+  unsubs.push(state.onChange(() => { if (!state.isMember() || !el.dataset.ready) render(root, param); }));
   if (!gate(el)) return;
   el.dataset.ready = '1';
-  if (/^#\/resources$/.test(location.hash)) { renderResources(); return; }
-  if (slug && CHANNELS[slug]) channel = slug;
+  const hash = location.hash;
+  if (/^#\/resources$/.test(hash)) { renderResources(); return; }
+  if (/^#\/dm$/.test(hash)) { renderThreads(); return; }
+  if (/^#\/dm\//.test(hash) && param) { renderDm(param); return; }
+  if (param && CHANNELS[param]) channel = param;
   renderChannel();
 }
 
@@ -155,4 +268,5 @@ export function destroy() {
   unsubs = [];
   if (el) delete el.dataset.ready;
   el = null;
+  dmOther = null;
 }

@@ -12,8 +12,9 @@ It is a discussion space between mates. Nothing in it is financial advice, and n
 - **Ideas**: pitch a business, property, shares, crypto or side hustle idea. Mates respond with "I'm in", "Keen to hear more" or "Challenge it", and discuss in threads. Ideas move through Open, In motion, Parked.
 - **Sessions**: the host schedules a round table with an agenda and a Google Meet or Zoom link. Members RSVP, then enter the live room: realtime chat, agenda checklist, shared notes, action items. Attendance builds points and a streak.
 - **Wins**: post wins, milestones and goals. Reactions, comments, and a "table form" strip.
-- **Talk**: five channels (Economy, Property, Shares, Crypto, Business) plus a resource library of books, podcasts, articles and videos.
-- **Me**: sign in, display name, password. The host gets the invite code, share link, rename, and member removal.
+- **Talk**: "The table" everyday chat, five market channels (Economy, Property, Shares, Crypto, Business), private direct messages between members with unread badges and seen receipts, and a resource library of books, podcasts, articles and videos.
+- **Profiles**: every member writes what they are chasing and picks focus areas. Tap any seat or name to open their profile and message them.
+- **Me**: sign in, display name, password, goals. The host gets the invite code, share link, rename, member removal, and a switch that lets members share the invite link too.
 
 ## Stack
 

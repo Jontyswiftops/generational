@@ -802,3 +802,40 @@ revoke execute on function public.auto_confirm_email() from public, anon, authen
 
 create trigger on_auth_user_autoconfirm before insert on auth.users
   for each row execute function public.auto_confirm_email();
+
+-- ============================================================
+-- Migration goals_dms_table_chat_invite_toggle (2026-09-07)
+-- Profile goals and focus areas, a general 'table' chat channel, a host
+-- toggle letting members share the invite link, and direct messages.
+-- Applied via MCP; see the Supabase migration of the same name for the
+-- full function bodies (table_status, table_members, dm_* RPCs).
+-- ============================================================
+
+alter table public.profiles
+  add column goals text check (char_length(goals) <= 600),
+  add column focus text[] not null default '{}';
+grant update (display_name, goals, focus) on public.profiles to authenticated;
+
+alter table public.channel_messages drop constraint channel_messages_channel_check;
+alter table public.channel_messages add constraint channel_messages_channel_check
+  check (channel in ('table', 'economy', 'property', 'shares', 'crypto', 'business'));
+
+alter table public.round_table add column members_can_invite boolean not null default false;
+-- set_members_can_invite(boolean): host only.
+-- table_status() now returns members_can_invite, can_invite, and the invite
+-- code to anyone who can invite. table_members() now returns goals, focus,
+-- ideas_count, posts_count, attended_count.
+
+create table public.dms (
+  id uuid primary key default gen_random_uuid(),
+  sender_id uuid not null references auth.users(id) on delete cascade,
+  recipient_id uuid not null references auth.users(id) on delete cascade,
+  body text not null check (char_length(body) between 1 and 2000),
+  created_at timestamptz not null default now(),
+  read_at timestamptz,
+  check (sender_id <> recipient_id)
+);
+alter table public.dms enable row level security;
+-- Policies: participants read; members send to members; recipient updates
+-- read_at; sender deletes. Grants: select, insert, delete, update (read_at).
+-- RPCs: dm_threads(), dm_thread(other uuid, lim int), dm_mark_read(other uuid), dm_unread().
