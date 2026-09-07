@@ -783,3 +783,22 @@ begin
 end $$;
 
 alter default privileges in schema public revoke execute on functions from public;
+
+-- ============================================================
+-- Migration auto_confirm_new_users (2026-09-07)
+-- Invite-only app: the invite code is the gate, so new accounts are
+-- confirmed on creation and can sign in with their password straight away.
+-- ============================================================
+
+create or replace function public.auto_confirm_email()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.email_confirmed_at is null then
+    new.email_confirmed_at := now();
+  end if;
+  return new;
+end $$;
+revoke execute on function public.auto_confirm_email() from public, anon, authenticated;
+
+create trigger on_auth_user_autoconfirm before insert on auth.users
+  for each row execute function public.auto_confirm_email();

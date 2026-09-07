@@ -24,16 +24,8 @@ export function onAuth(cb) {
 
 const appUrl = () => location.origin + location.pathname;
 
-export const sendMagicLink = email =>
-  sb.auth.signInWithOtp({ email, options: { emailRedirectTo: appUrl() } });
-
 export const signInPassword = (email, password) =>
   sb.auth.signInWithPassword({ email, password });
-
-// The 6-digit code from the sign-in email; lets iOS Home Screen users sign
-// in without leaving the app (magic links always open in Safari instead).
-export const verifyEmailCode = (email, token) =>
-  sb.auth.verifyOtp({ email, token: token.trim(), type: 'email' });
 
 export const setPassword = password => sb.auth.updateUser({ password });
 

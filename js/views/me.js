@@ -17,47 +17,11 @@ function signInHtml() {
     '<div class="row mt"><button class="btn primary grow" id="pwSignIn">Sign in</button>' +
     '<button class="btn grow" id="pwSignUp">Create account</button></div>' +
     '<div class="hint" id="authStatus"></div>' +
-    '<button class="linkbtn" id="emailToggle">Email me a sign-in code instead</button>' +
-    '<div id="emailBox" hidden>' +
-    '<button class="btn" id="magicBtn">Email me a sign-in code</button>' +
-    '<div id="otpBox" hidden class="mt">' +
-    '<label for="otpInput">6-digit code from the email</label>' +
-    '<div class="row"><input type="text" id="otpInput" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456">' +
-    '<button class="btn sm" id="otpBtn">Verify</button></div>' +
-    '</div>' +
-    '<div class="hint">If the email only contains a link, it opens in your browser rather than this app. Signing in with a password avoids that.</div>' +
-    '</div></div>' + DISCLAIMER;
+    '<div class="hint">Forgot your password? Message Jonty and he can reset it.</div>' +
+    '</div>' + DISCLAIMER;
 }
 
 function bindSignIn() {
-  el.querySelector('#magicBtn').addEventListener('click', async e => {
-    const email = el.querySelector('#authEmail').value.trim();
-    const status = el.querySelector('#authStatus');
-    if (!email || !email.includes('@')) { status.textContent = 'Enter your email address first.'; return; }
-    e.target.disabled = true;
-    const { error } = await cloud.sendMagicLink(email);
-    e.target.disabled = false;
-    if (error) status.textContent = 'Could not send the email: ' + error.message;
-    else {
-      status.textContent = 'Check your email, then type the 6-digit code below. It can take a minute to arrive.';
-      el.querySelector('#otpBox').hidden = false;
-      el.querySelector('#otpInput').focus();
-    }
-  });
-  el.querySelector('#otpBtn').addEventListener('click', async e => {
-    const email = el.querySelector('#authEmail').value.trim();
-    const token = el.querySelector('#otpInput').value.trim();
-    const status = el.querySelector('#authStatus');
-    if (token.length < 6) { status.textContent = 'Enter the 6-digit code from the email.'; return; }
-    e.target.disabled = true;
-    const { error } = await cloud.verifyEmailCode(email, token);
-    e.target.disabled = false;
-    if (error) status.textContent = 'That code did not work: ' + error.message + ' Codes expire after a while; you can request a new one.';
-  });
-  el.querySelector('#emailToggle').addEventListener('click', () => {
-    const box = el.querySelector('#emailBox');
-    box.hidden = !box.hidden;
-  });
   const pwAuth = async signUp => {
     const email = el.querySelector('#authEmail').value.trim();
     const pw = el.querySelector('#authPw').value;
@@ -70,10 +34,12 @@ function bindSignIn() {
       : await cloud.signInPassword(email, pw);
     if (error) {
       status.textContent = /invalid login credentials/i.test(error.message)
-        ? 'That email and password do not match. If you normally sign in with an emailed code, your account has no password yet: sign in with a code, then set a password here.'
+        ? 'That email and password do not match. If you have not created an account yet, use Create account.'
         : error.message;
     } else if (signUp) {
-      status.textContent = 'Account created. If your email needs confirming, check your inbox, then sign in.';
+      status.textContent = 'Account created. Signing you in…';
+      const r = await cloud.signInPassword(email, pw);
+      if (r.error) status.textContent = 'Account created. Now sign in with your email and password.';
     }
   };
   el.querySelector('#pwSignIn').addEventListener('click', () => pwAuth(false));

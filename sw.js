@@ -1,6 +1,6 @@
 // Generational service worker: network-first for same-origin requests,
 // cache fallback for offline. Bump CACHE and update ASSETS when files change.
-const CACHE = 'generational-v2';
+const CACHE = 'generational-v3';
 const ASSETS = [
   './',
   'index.html',

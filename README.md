@@ -35,7 +35,7 @@ blender/build_table.py reproducible Blender script for the table asset
 1. Create a Supabase project. Put its URL and publishable key in `js/config.js`.
 2. Run `supabase/schema.sql` in the SQL editor (or apply it as a migration).
 3. Authentication, URL Configuration: set Site URL to `https://jontyswiftops.github.io/generational/` and add it as a redirect URL.
-4. Authentication, Email Templates, Magic Link: include `{{ .Token }}` in the body, for example `Your Generational sign-in code: {{ .Token }}`. This is what lets people sign in from the home-screen app on iPhone without being bounced to Safari.
+4. Sign-in is email and password only. New accounts are auto-confirmed by a database trigger (see the end of `supabase/schema.sql`), so no email templates need editing. If someone forgets their password, the host resets it from the Supabase dashboard (Authentication, Users, Send password recovery, or set a new one directly).
 5. Push to GitHub, Settings, Pages: deploy from branch `main`, folder `/ (root)`.
 6. Open the app, create your account on the Me screen, press **Claim the host seat**, then share the invite link.
 
